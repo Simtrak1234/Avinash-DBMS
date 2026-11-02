@@ -130,7 +130,7 @@ export default function EditModal({ isOpen, onClose, record, category, onSaved }
           if (val !== undefined && val !== "") { if (!payload[parent]) payload[parent] = {}; payload[parent][child] = val; }
           return;
         }
-        if (form[f.key] !== undefined && form[f.key] !== "") payload[f.key] = form[f.key];
+        if (form[f.key] !== undefined) payload[f.key] = form[f.key];
       });
       await axios.put(`${category.endpoint}/${record._id}`, payload);
       toast.success("Record updated successfully!");
@@ -156,8 +156,8 @@ export default function EditModal({ isOpen, onClose, record, category, onSaved }
   };
 
   const SECTION_BEFORE = {
-    "interaction.interactionBy":       { label: "Current Interaction", accent: category.accent },
-    "interaction.nextInteractionDate": { label: "Next Interaction",    accent: category.accent },
+
+
     "onboardedBy":                     { label: "Onboarding Info",     accent: category.accent },
   };
 

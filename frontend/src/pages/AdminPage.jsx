@@ -218,7 +218,7 @@ export default function AdminPage() {
     setFilters({}); setDateFrom(""); setDateTo(""); setSelectedIds(new Set());
   }, [activeTab]);
 
-  useEffect(() => { setSelectedIds(new Set()); }, [page, search, filters, dateFrom, dateTo]);
+  useEffect(() => { setSelectedIds(new Set()); }, [page, search, filters, dateFrom, dateTo, activeTab, upcomingFilter]);
 
   const handleFilterChange = useCallback((key, val) => {
     setFilters((prev) => {
@@ -251,9 +251,9 @@ export default function AdminPage() {
     return { overdue, critical, upcoming };
   };
 
-  const allPageIds = data.map((r) => r._id);
+  const allPageIds = displayData.map((r) => r._id);
   const handleToggleAll = () => {
-    const allSel = allPageIds.every((id) => selectedIds.has(id));
+    const allSel = allPageIds.length > 0 && allPageIds.every((id) => selectedIds.has(id));
     setSelectedIds((p) => {
       const n = new Set(p);
       allSel ? allPageIds.forEach((id) => n.delete(id)) : allPageIds.forEach((id) => n.add(id));
