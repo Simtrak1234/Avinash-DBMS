@@ -146,6 +146,7 @@ export default function AdminPage() {
     if (location.state?.showImport) setShowImport(true);
     if (location.state?.action === "add") {
       if (location.state.tab === "organisation") navigate("/organisation/add");
+      else if (location.state.tab === "volunteer") navigate("/organisation/volunteer");
       else setEditRecord({});
     }
   }, []); // eslint-disable-line
@@ -391,6 +392,7 @@ export default function AdminPage() {
               <button
                 onClick={() => {
                   if (activeTab === "organisation") navigate("/organisation/add");
+                  else if (activeTab === "volunteer") navigate("/organisation/volunteer");
                   else setEditRecord({});
                 }}
                 className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white transition-all hover:-translate-y-0.5 shadow-md"
