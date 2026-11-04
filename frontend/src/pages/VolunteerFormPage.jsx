@@ -209,10 +209,10 @@ export default function VolunteerFormPage() {
             Register Another
           </button>
           <Link
-            to="/organisation"
+            to="/admin?tab=volunteer"
             className="flex-1 px-4 py-2.5 rounded-xl text-sm font-medium text-slate-600 bg-white border border-slate-300 hover:bg-slate-50 transition-all text-center shadow-sm"
           >
-            Back to Orgs
+            Back to Volunteers
           </Link>
         </div>
       </div>
@@ -237,7 +237,7 @@ export default function VolunteerFormPage() {
       <div className="max-w-3xl mx-auto px-5 py-10">
         {/* Breadcrumb */}
         <div className="flex items-center gap-2 text-xs text-slate-400 mb-8">
-          <Link to="/organisation" className="hover:text-blue-600 transition-colors font-medium">Organisation</Link>
+          <Link to="/admin?tab=volunteer" className="hover:text-blue-600 transition-colors font-medium">Volunteers</Link>
           <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7"/>
           </svg>
@@ -401,7 +401,7 @@ export default function VolunteerFormPage() {
           {/* Footer */}
           <div className="flex items-center justify-between pt-4 border-t border-slate-100">
             <Link
-              to="/organisation"
+              to="/admin?tab=volunteer"
               className="text-sm text-slate-500 hover:text-slate-900 flex items-center gap-1.5 transition-colors font-medium"
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>

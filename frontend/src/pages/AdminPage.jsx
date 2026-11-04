@@ -114,6 +114,7 @@ export default function AdminPage() {
   const [bulkDeleteLoading,     setBulkDeleteLoading]     = useState(false);
 
   const abortRef = useRef(null);
+  const prevTabRef = useRef(activeTab);
 
   const category = useMemo(
     () => CATS.find((c) => c.id === activeTab) ?? CATS[0] ?? null,
@@ -146,6 +147,7 @@ export default function AdminPage() {
     if (location.state?.showImport) setShowImport(true);
     if (location.state?.action === "add") {
       if (location.state.tab === "organisation") navigate("/organisation/add");
+      else if (location.state.tab === "volunteer") navigate("/organisation/volunteer");
       else setEditRecord({});
     }
   }, []); // eslint-disable-line
@@ -213,12 +215,15 @@ export default function AdminPage() {
   useEffect(() => () => { if (abortRef.current) abortRef.current.abort(); }, []);
 
   useEffect(() => {
+    if (prevTabRef.current === activeTab) return;
+    prevTabRef.current = activeTab;
+
     setData([]); setTotal(0); setPages(1); setPage(1);
     setSearch(""); setSearchInput(""); setSortField("createdAt"); setSortDir("desc");
     setFilters({}); setDateFrom(""); setDateTo(""); setSelectedIds(new Set());
   }, [activeTab]);
 
-  useEffect(() => { setSelectedIds(new Set()); }, [page, search, filters, dateFrom, dateTo]);
+  useEffect(() => { setSelectedIds(new Set()); }, [page, search, filters, dateFrom, dateTo, activeTab, upcomingFilter]);
 
   const handleFilterChange = useCallback((key, val) => {
     setFilters((prev) => {
@@ -251,9 +256,9 @@ export default function AdminPage() {
     return { overdue, critical, upcoming };
   };
 
-  const allPageIds = data.map((r) => r._id);
+  const allPageIds = displayData.map((r) => r._id);
   const handleToggleAll = () => {
-    const allSel = allPageIds.every((id) => selectedIds.has(id));
+    const allSel = allPageIds.length > 0 && allPageIds.every((id) => selectedIds.has(id));
     setSelectedIds((p) => {
       const n = new Set(p);
       allSel ? allPageIds.forEach((id) => n.delete(id)) : allPageIds.forEach((id) => n.add(id));
@@ -391,6 +396,7 @@ export default function AdminPage() {
               <button
                 onClick={() => {
                   if (activeTab === "organisation") navigate("/organisation/add");
+                  else if (activeTab === "volunteer") navigate("/organisation/volunteer");
                   else setEditRecord({});
                 }}
                 className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white transition-all hover:-translate-y-0.5 shadow-md"

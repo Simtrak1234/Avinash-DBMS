@@ -412,45 +412,6 @@ export const CATEGORIES = [
       { key: "contacts", label: "Contact Persons", type: "contacts" },
 
       {
-        key: "interaction.interactionBy",
-        label: "Interaction By",
-        type: "text",
-        required: true,
-      },
-      {
-        key: "interaction.interactedWith",
-        label: "Interacted With",
-        type: "text",
-        required: true,
-      },
-      {
-        key: "interaction.interactionDate",
-        label: "Interaction Date",
-        type: "date",
-        required: true,
-      },
-      {
-        key: "interaction.interactionMode",
-        label: "Interaction Mode",
-        type: "select",
-        options: INTERACTION_MODES,
-        required: true,
-      },
-      { key: "interaction.interactionStatus",  label: "Interaction Status",   type: "select", options: ["Pending", "Progressive", "Active", "Inactive", "Initiated"] }, 
-      { key: "interaction.notes", label: "Notes", type: "textarea" },
-      {
-        key: "interaction.ninAin",
-        label: "Interaction NIN / AIN",
-        type: "text",
-        required: true,
-      },
-      {
-        key: "interaction.nextInteractionDate",
-        label: "Next Interaction Date",
-        type: "date",
-      },
-
-      {
         key: "onboardedBy",
         label: "Onboarded By",
         type: "text",

@@ -6,6 +6,7 @@ import {
   getHiddenFields,
   stripHiddenFields,
   verifyOwnRecord,
+  canAccessOrg,
 } from "../middleware/permission.middleware.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -507,10 +508,7 @@ export const addInteraction = asyncHandler(async (req, res) => {
     return sendError(res, 422, `Invalid interactionMode. Must be one of: ${VALID_MODES.join(", ")}.`);
 
   const org = await Organisation.findById(id);
-  if (!org) return sendError(res, 404, "Organisation not found.");
-
-  if (req.user.role === "data_entry" && !verifyOwnRecord(org, req.user._id))
-    return sendError(res, 403, "You can only edit records you created.");
+  if (!org || !canAccessOrg(req.user, org)) return sendError(res, 404, "Organisation not found.");
 
   // Clear nextInteractionDate + nextNotes from every existing interaction in-memory.
   // MongoDB rejects $push and $unset on the same path ("interactions" vs "interactions.N.x")
@@ -797,10 +795,9 @@ export const getOrganisationById = asyncHandler(async (req, res) => {
   const organisation = await Organisation.findById(req.params.id)
     .populate("registeredBy", "fullName email");
 
-  if (!organisation) return sendError(res, 404, "Organisation not found.");
-
-  if (req.user.role === "data_entry" && !verifyOwnRecord(organisation, req.user._id))
-    return sendError(res, 403, "You can only view records you created.");
+  if (!organisation || !canAccessOrg(req.user, organisation)) {
+    return sendError(res, 404, "Organisation not found.");
+  }
 
   const hidden  = getHiddenFields(req);
   const safeOrg = stripHiddenFields(organisation.toObject(), hidden);
@@ -813,18 +810,15 @@ export const getOrganisationById = asyncHandler(async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const updateOrganisation = asyncHandler(async (req, res) => {
-  if (req.user.role === "data_entry") {
-    const existing = await Organisation.findById(req.params.id).lean();
-    if (!existing) return sendError(res, 404, "Organisation not found.");
-    if (!verifyOwnRecord(existing, req.user._id))
-      return sendError(res, 403, "You can only edit records you created.");
+  const existing = await Organisation.findById(req.params.id);
+  if (!existing || !canAccessOrg(req.user, existing)) {
+    return sendError(res, 404, "Organisation not found.");
   }
 
   const ALLOWED_FIELDS = [
     "centreType", "centreName", "website", "address",
     "city", "district", "state", "pincode",
     "contacts", "onboardedBy", "ninAin", "status",
-    "interaction",
   ];
 
   const updates = {};
@@ -846,12 +840,6 @@ export const updateOrganisation = asyncHandler(async (req, res) => {
   }
 
   const mongoUpdate = { $set: {} };
-
-  if (updates.interaction) {
-    mongoUpdate.$push = { interactions: buildInteractionFromBody(updates.interaction) };
-    delete updates.interaction;
-  }
-
   Object.entries(updates).forEach(([k, v]) => { mongoUpdate.$set[k] = v; });
   if (Object.keys(mongoUpdate.$set).length === 0) delete mongoUpdate.$set;
 
@@ -861,8 +849,12 @@ export const updateOrganisation = asyncHandler(async (req, res) => {
       mongoUpdate,
       { new: true, runValidators: true, context: "query" }
     );
-    if (!organisation) return sendError(res, 404, "Organisation not found.");
-    return sendSuccess(res, 200, "Organisation updated successfully.", { organisation });
+    if (!organisation || !canAccessOrg(req.user, organisation)) {
+      return sendError(res, 404, "Organisation not found.");
+    }
+    const hidden = getHiddenFields(req);
+    const safeOrg = stripHiddenFields(organisation.toObject(), hidden);
+    return sendSuccess(res, 200, "Organisation updated successfully.", { organisation: safeOrg });
   } catch (err) {
     if (err.name === "ValidationError")
       return sendError(res, 422, Object.values(err.errors).map((e) => e.message).join(" | "));
@@ -875,11 +867,9 @@ export const updateOrganisation = asyncHandler(async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const deleteOrganisation = asyncHandler(async (req, res) => {
-  if (req.user.role === "data_entry") {
-    const existing = await Organisation.findById(req.params.id).lean();
-    if (!existing) return sendError(res, 404, "Organisation not found.");
-    if (!verifyOwnRecord(existing, req.user._id))
-      return sendError(res, 403, "You can only delete records you created.");
+  const existing = await Organisation.findById(req.params.id);
+  if (!existing || !canAccessOrg(req.user, existing)) {
+    return sendError(res, 404, "Organisation not found.");
   }
 
   const organisation = await Organisation.findByIdAndDelete(req.params.id);

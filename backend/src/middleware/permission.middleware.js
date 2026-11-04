@@ -149,10 +149,57 @@ export const getHiddenFields = (req) => {
   return req.user.permissions?.hiddenFields ?? [];
 };
 
+// ─── ID helper ───────────────────────────────────────────────────────────────
+export const idOf = (v) => String(v?._id ?? v ?? "");
+
 // ─── verifyOwnRecord ─────────────────────────────────────────────────────────
 export const verifyOwnRecord = (record, userId) => {
-  const owner =
-    record?.registeredBy?.toString() ||
-    record?.registered_by?.toString();
-  return owner === userId.toString();
+  const ownerId = idOf(record?.registeredBy ?? record?.registered_by);
+  const targetId = idOf(userId);
+  return Boolean(ownerId && targetId && ownerId === targetId);
+};
+
+// ─── Single-record access helpers ───────────────────────────────────────────
+export const canAccessOrg = (user, org) => {
+  if (!user || !org) return false;
+  if (isFullAdmin(user)) return true;
+
+  if (user.role === "data_entry") {
+    return verifyOwnRecord(org, user._id);
+  }
+
+  if (user.role === "partial_admin") {
+    const p = user.permissions || {};
+    const mods = p.allowedModules || [];
+    const typeOk = mods.includes("organisation") || mods.includes(org.centreType);
+    const from = p.dateFrom ? new Date(p.dateFrom) : null;
+    const to = p.dateTo ? new Date(new Date(p.dateTo).setUTCHours(23, 59, 59, 999)) : null;
+    const orgDate = org.createdAt ? new Date(org.createdAt) : null;
+    const dateOk = !orgDate || ((!from || orgDate >= from) && (!to || orgDate <= to));
+    return Boolean(typeOk && dateOk);
+  }
+
+  return false;
+};
+
+export const canAccessVolunteer = (user, volunteer) => {
+  if (!user || !volunteer) return false;
+  if (isFullAdmin(user)) return true;
+
+  if (user.role === "data_entry") {
+    return verifyOwnRecord(volunteer, user._id);
+  }
+
+  if (user.role === "partial_admin") {
+    const p = user.permissions || {};
+    const mods = p.allowedModules || [];
+    const modOk = mods.includes("volunteer");
+    const from = p.dateFrom ? new Date(p.dateFrom) : null;
+    const to = p.dateTo ? new Date(new Date(p.dateTo).setUTCHours(23, 59, 59, 999)) : null;
+    const volDate = volunteer.createdAt ? new Date(volunteer.createdAt) : null;
+    const dateOk = !volDate || ((!from || volDate >= from) && (!to || volDate <= to));
+    return Boolean(modOk && dateOk);
+  }
+
+  return false;
 };

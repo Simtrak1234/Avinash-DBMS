@@ -791,7 +791,7 @@ function PermissionPanel({ user, onClose, onSaved }) {
 // ── Add User Modal ────────────────────────────────────────────────────────────
 function AddUserModal({ onClose, onCreated }) {
   const [form, setForm] = useState({
-    fullName: "", email: "", phone: "", password: "", age: "",
+    fullName: "", email: "", phone: "", password: "", ninAinNumber: "",
     role: "data_entry",
     permissions: { allowedModules: [], allowedActions: ["view", "add"], hiddenFields: [], notificationAccess: false, dateFrom: "", dateTo: "" },
   });
@@ -805,7 +805,10 @@ function AddUserModal({ onClose, onCreated }) {
     try {
       await axios.post("/users", {
         ...form,
-        age: Number(form.age),
+        ninAinNumber: form.ninAinNumber.trim(),
+        fullName: form.fullName.trim(),
+        email: form.email.toLowerCase().trim(),
+        phone: form.phone.trim(),
         permissions: { ...form.permissions, dateFrom: form.permissions.dateFrom || null, dateTo: form.permissions.dateTo || null },
       });
       toast.success("User created successfully.");
@@ -879,8 +882,8 @@ function AddUserModal({ onClose, onCreated }) {
               </div>
             </div>
             <div>
-              <label style={labelStyle}>Age</label>
-              <input required type="number" min="13" max="120" className="acl-input" style={inputStyle} placeholder="Age" value={form.age} onChange={(e) => set("age", e.target.value)} />
+              <label style={labelStyle}>NIN / AIN Number</label>
+              <input required className="acl-input" style={inputStyle} placeholder="e.g. NIN12345" value={form.ninAinNumber} onChange={(e) => set("ninAinNumber", e.target.value)} />
             </div>
           </div>
 

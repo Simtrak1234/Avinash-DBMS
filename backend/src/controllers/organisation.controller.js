@@ -6,6 +6,8 @@ import {
   getHiddenFields,
   stripHiddenFields,
   verifyOwnRecord,
+  canAccessVolunteer,
+  canAccessOrg,
 } from "../middleware/permission.middleware.js";
 
 const BULK_LIMIT = 500;
@@ -197,11 +199,7 @@ export const getAllVolunteers = asyncHandler(async (req, res) => {
 export const getVolunteerById = asyncHandler(async (req, res) => {
   const volunteer = await Volunteer.findById(req.params.id)
     .populate("registered_by", "fullName email");
-  if (!volunteer) return sendError(res, 404, "Volunteer not found.");
-
-  if (req.user.role === "data_entry" && !verifyOwnRecord(volunteer, req.user._id)) {
-    return sendError(res, 403, "You can only view records you created.");
-  }
+  if (!volunteer || !canAccessVolunteer(req.user, volunteer)) return sendError(res, 404, "Volunteer not found.");
 
   const hidden = getHiddenFields(req);
   const safeVolunteer = stripHiddenFields(volunteer.toObject(), hidden);
@@ -211,12 +209,9 @@ export const getVolunteerById = asyncHandler(async (req, res) => {
 
 // ── PUT /organisations/volunteers/:id ─────────────────────────────────────────
 export const updateVolunteer = asyncHandler(async (req, res) => {
-  if (req.user.role === "data_entry") {
-    const existing = await Volunteer.findById(req.params.id).lean();
-    if (!existing) return sendError(res, 404, "Volunteer not found.");
-    if (!verifyOwnRecord(existing, req.user._id)) {
-      return sendError(res, 403, "You can only edit records you created.");
-    }
+  const existing = await Volunteer.findById(req.params.id);
+  if (!existing || !canAccessVolunteer(req.user, existing)) {
+    return sendError(res, 404, "Volunteer not found.");
   }
 
   const allowed = [
@@ -244,12 +239,9 @@ export const updateVolunteer = asyncHandler(async (req, res) => {
 
 // ── DELETE /organisations/volunteers/:id ──────────────────────────────────────
 export const deleteVolunteer = asyncHandler(async (req, res) => {
-  if (req.user.role === "data_entry") {
-    const existing = await Volunteer.findById(req.params.id).lean();
-    if (!existing) return sendError(res, 404, "Volunteer not found.");
-    if (!verifyOwnRecord(existing, req.user._id)) {
-      return sendError(res, 403, "You can only delete records you created.");
-    }
+  const existing = await Volunteer.findById(req.params.id);
+  if (!existing || !canAccessVolunteer(req.user, existing)) {
+    return sendError(res, 404, "Volunteer not found.");
   }
 
   const volunteer = await Volunteer.findByIdAndDelete(req.params.id);
@@ -349,12 +341,7 @@ export const cancelNextInteraction = asyncHandler(async (req, res) => {
   }
 
   const org = await Organisation.findById(id);
-  if (!org) return sendError(res, 404, "Organisation not found.");
-
-  // data_entry: ownership verify karo
-  if (req.user.role === "data_entry" && !verifyOwnRecord(org, req.user._id)) {
-    return sendError(res, 403, "You can only edit records you created.");
-  }
+  if (!org || !canAccessOrg(req.user, org)) return sendError(res, 404, "Organisation not found.");
 
   const entry = org.interactions[interactionIndex];
   if (!entry) return sendError(res, 404, "Interaction entry not found.");
@@ -368,14 +355,6 @@ export const cancelNextInteraction = asyncHandler(async (req, res) => {
 });
 
 // ── PATCH /organisations/:id/interactions/next ────────────────────────────────
-// RESCHEDULE — edits the SAME interaction entry's nextInteractionDate /
-// interactionMode / nextNotes in place. Does NOT push a new interaction entry,
-// so interactionCount (org.interactions.length) stays unchanged.
-//
-// NOTE: This controller was MISSING earlier — the frontend
-// (Notificationspage.jsx → handleRescheduleConfirm) was calling this exact
-// route, so the PATCH request had nowhere to land, and the "reschedule" never
-// actually persisted or reflected in the UI.
 export const rescheduleNextInteraction = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { interactionIndex, nextInteractionDate, interactionMode, nextNotes } = req.body;
@@ -396,12 +375,7 @@ export const rescheduleNextInteraction = asyncHandler(async (req, res) => {
   }
 
   const org = await Organisation.findById(id);
-  if (!org) return sendError(res, 404, "Organisation not found.");
-
-  // data_entry: ownership verify karo
-  if (req.user.role === "data_entry" && !verifyOwnRecord(org, req.user._id)) {
-    return sendError(res, 403, "You can only edit records you created.");
-  }
+  if (!org || !canAccessOrg(req.user, org)) return sendError(res, 404, "Organisation not found.");
 
   const entry = org.interactions[interactionIndex];
   if (!entry) return sendError(res, 404, "Interaction entry not found.");
