@@ -12,6 +12,15 @@ import organisationRoutes from "./routes/organisation.routes.js";
 import userManagementRoutes from "./routes/userManagement.routes.js";
 import errorHandler from "./middleware/error.middleware.js";
 
+// Prevent unhandled errors from terminating nodemon
+process.on("unhandledRejection", (reason, promise) => {
+  console.error("⚠️ Unhandled Rejection at:", promise, "reason:", reason);
+});
+
+process.on("uncaughtException", (err) => {
+  console.error("⚠️ Uncaught Exception:", err);
+});
+
 const app = express();
 app.set("trust proxy", 1);
 const PORT = process.env.PORT || 3000;
@@ -36,7 +45,13 @@ if (process.env.NODE_ENV === "development") {
 }
 
 app.get("/health", (req, res) => {
-  res.status(200).json({ success: true, status: "ok", environment: process.env.NODE_ENV, timestamp: new Date().toISOString() });
+  res.status(200).json({
+    success: true,
+    status: "ok",
+    dbState: mongoose.connection.readyState === 1 ? "connected" : "connecting",
+    environment: process.env.NODE_ENV,
+    timestamp: new Date().toISOString()
+  });
 });
 
 app.use("/api/v1/auth",          authRoutes);
@@ -49,10 +64,21 @@ app.use((req, res) => {
 app.use(errorHandler);
 
 const startServer = async () => {
-  await connectDB();
+  const server = app.listen(PORT, () => {
+    console.log(`\n🚀 Server running at http://localhost:${PORT}`);
+  });
 
-  app.listen(PORT, () => {
-    console.log(`\nServer running at http://localhost:${PORT}`);
+  server.on("error", (err) => {
+    if (err.code === "EADDRINUSE") {
+      console.error(`\n❌ Error: Port ${PORT} is already in use by another process.`);
+      console.error(`👉 Close the process currently using port ${PORT} or run on another port.`);
+    } else {
+      console.error("Server listener error:", err);
+    }
+  });
+
+  connectDB().catch((err) => {
+    console.error("connectDB error:", err.message);
   });
 };
 
