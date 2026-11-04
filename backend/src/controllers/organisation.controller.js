@@ -346,6 +346,40 @@ export const cancelNextInteraction = asyncHandler(async (req, res) => {
   const entry = org.interactions[interactionIndex];
   if (!entry) return sendError(res, 404, "Interaction entry not found.");
 
+  // nextInteractionDate clear karo — interaction "cancelled"
+  org.interactions[interactionIndex].nextInteractionDate = undefined;
+  org.markModified("interactions");
+  await org.save({ validateBeforeSave: false });
+
+  return sendSuccess(res, 200, "Next interaction date cancelled successfully.");
+});
+
+// ── PATCH /organisations/:id/interactions/next ────────────────────────────────
+export const rescheduleNextInteraction = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { interactionIndex, nextInteractionDate, interactionMode, nextNotes } = req.body;
+
+  if (interactionIndex === undefined || interactionIndex === null) {
+    return sendError(res, 422, "interactionIndex is required.");
+  }
+  if (!nextInteractionDate) {
+    return sendError(res, 422, "nextInteractionDate is required.");
+  }
+  if (!interactionMode || !VALID_MODES.includes(interactionMode)) {
+    return sendError(res, 422, `interactionMode must be one of: ${VALID_MODES.join(", ")}.`);
+  }
+
+  const parsedDate = new Date(nextInteractionDate);
+  if (isNaN(parsedDate.getTime())) {
+    return sendError(res, 422, "nextInteractionDate is not a valid date.");
+  }
+
+  const org = await Organisation.findById(id);
+  if (!org || !canAccessOrg(req.user, org)) return sendError(res, 404, "Organisation not found.");
+
+  const entry = org.interactions[interactionIndex];
+  if (!entry) return sendError(res, 404, "Interaction entry not found.");
+
   // Same entry ko in-place update karo — koi naya interaction push nahi hota
   entry.nextInteractionDate = parsedDate;
   entry.interactionMode     = interactionMode;
