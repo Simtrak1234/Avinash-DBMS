@@ -114,6 +114,7 @@ export default function AdminPage() {
   const [bulkDeleteLoading,     setBulkDeleteLoading]     = useState(false);
 
   const abortRef = useRef(null);
+  const prevTabRef = useRef(activeTab);
 
   const category = useMemo(
     () => CATS.find((c) => c.id === activeTab) ?? CATS[0] ?? null,
@@ -214,6 +215,9 @@ export default function AdminPage() {
   useEffect(() => () => { if (abortRef.current) abortRef.current.abort(); }, []);
 
   useEffect(() => {
+    if (prevTabRef.current === activeTab) return;
+    prevTabRef.current = activeTab;
+
     setData([]); setTotal(0); setPages(1); setPage(1);
     setSearch(""); setSearchInput(""); setSortField("createdAt"); setSortDir("desc");
     setFilters({}); setDateFrom(""); setDateTo(""); setSelectedIds(new Set());

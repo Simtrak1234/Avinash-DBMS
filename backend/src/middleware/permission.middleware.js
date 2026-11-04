@@ -155,7 +155,8 @@ export const idOf = (v) => String(v?._id ?? v ?? "");
 // ─── verifyOwnRecord ─────────────────────────────────────────────────────────
 export const verifyOwnRecord = (record, userId) => {
   const ownerId = idOf(record?.registeredBy ?? record?.registered_by);
-  return Boolean(ownerId && userId && ownerId === String(userId));
+  const targetId = idOf(userId);
+  return Boolean(ownerId && targetId && ownerId === targetId);
 };
 
 // ─── Single-record access helpers ───────────────────────────────────────────

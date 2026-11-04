@@ -510,9 +510,6 @@ export const addInteraction = asyncHandler(async (req, res) => {
   const org = await Organisation.findById(id);
   if (!org || !canAccessOrg(req.user, org)) return sendError(res, 404, "Organisation not found.");
 
-
-
-
   // Clear nextInteractionDate + nextNotes from every existing interaction in-memory.
   // MongoDB rejects $push and $unset on the same path ("interactions" vs "interactions.N.x")
   // in a single update, so we mutate the doc in memory and call save() once — atomic
@@ -538,6 +535,256 @@ export const addInteraction = asyncHandler(async (req, res) => {
       return sendError(res, 422, Object.values(err.errors).map((e) => e.message).join(" | "));
     throw err;
   }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/v1/organisations/:id/interactions
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const getInteractions = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+
+  const organisation = await Organisation.findById(id)
+    .select("interactions centreName")
+    .lean();
+
+  if (!organisation) return sendError(res, 404, "Organisation not found.");
+
+  const history = [...(organisation.interactions || [])].reverse();
+
+  return sendSuccess(res, 200, "Interactions retrieved successfully.", {
+    centreName:   organisation.centreName,
+    interactions: history,
+    total:        history.length,
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/v1/organisations/lookup/pincode?pincode=123456
+// Returns existing orgs at a given pincode for pre-entry duplicate prevention.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const lookupByPincode = asyncHandler(async (req, res) => {
+  const pin = normalisePincode(req.query.pincode || "");
+  if (!pin || pin.length !== 6)
+    return sendError(res, 422, "A valid 6-digit pincode is required.");
+
+  const PINCODE_LIMIT = 50;
+  const orgs = await Organisation.find({ pincode: pin })
+    .select("_id centreName centreType city district state pincode")
+    .limit(PINCODE_LIMIT + 1)
+    .lean();
+
+  const truncated = orgs.length > PINCODE_LIMIT;
+  if (truncated) orgs.pop();
+
+  return sendSuccess(res, 200, "Pincode lookup completed.", {
+    count:         orgs.length,
+    truncated,
+    organisations: orgs,
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/v1/organisations/:id/merge
+// Merges incoming record data into an existing organisation.
+// Strategy: append new contacts (dedup by email), append new interaction,
+//           fill blank scalar fields from incoming data.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const mergeOrganisations = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const incoming = req.body;
+
+  const org = await Organisation.findById(id);
+  if (!org) return sendError(res, 404, "Organisation not found.");
+
+  const pushOps = {};
+
+  // Append contacts not already present (dedup by email, then phone)
+  const existingEmails = new Set(org.contacts.map((c) => (c.email || "").toLowerCase().trim()));
+  const existingPhones = new Set(org.contacts.map((c) => (c.contactNumber || "").trim()));
+  const newContacts = (Array.isArray(incoming.contacts) ? incoming.contacts : []).filter((c) => {
+    const email = (c.email || "").toLowerCase().trim();
+    const phone = (c.contactNumber || "").trim();
+    const emailDup = email && existingEmails.has(email);
+    const phoneDup = phone && existingPhones.has(phone);
+    return (email || phone) && !emailDup && !phoneDup;
+  });
+
+  if (newContacts.length > 0) pushOps.contacts = { $each: newContacts };
+
+  // Append interaction from incoming data
+  const rawInteraction = incoming.interaction || (Array.isArray(incoming.interactions) ? incoming.interactions[0] : null);
+  if (rawInteraction) {
+    pushOps.interactions = buildInteractionFromBody(rawInteraction);
+  }
+
+  const updateOps = {};
+  if (Object.keys(pushOps).length > 0) updateOps.$push = pushOps;
+
+  // Fill empty scalar fields on the existing record
+  const setOps = {};
+  if ((!org.website || org.website === "https://example.com") && incoming.website)
+    setOps.website = normaliseWebsite(incoming.website);
+  if (!org.address && incoming.address)
+    setOps.address = String(incoming.address).trim();
+  if (!org.ninAin && incoming.ninAin)
+    setOps.ninAin = String(incoming.ninAin).trim();
+
+  if (Object.keys(setOps).length > 0) updateOps.$set = setOps;
+
+  if (Object.keys(updateOps).length === 0) {
+    return sendSuccess(res, 200, "No new data to merge — existing record is already up to date.", {
+      organisation: org,
+      newContacts: 0,
+      newInteractions: 0,
+    });
+  }
+
+  let updated;
+  try {
+    updated = await Organisation.findByIdAndUpdate(id, updateOps, {
+      new:            true,
+      runValidators:  false,
+    });
+  } catch (err) {
+    if (err.name === "ValidationError")
+      return sendError(res, 422, Object.values(err.errors).map((e) => e.message).join(" | "));
+    throw err;
+  }
+
+  if (!updated) return sendError(res, 404, "Organisation not found after update.");
+
+  return sendSuccess(res, 200, "Records merged successfully.", {
+    organisation:    updated,
+    newContacts:     newContacts.length,
+    newInteractions: rawInteraction ? 1 : 0,
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/v1/organisations/meta/districts
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const getDistrictsByState = asyncHandler(async (req, res) => {
+  const state = String(req.query.state || "").trim();
+  if (!state) return sendError(res, 422, "Query param 'state' is required.");
+
+  const districts = await Organisation.distinct("district", { state });
+  districts.sort((a, b) => a.localeCompare(b, "en-IN"));
+
+  return sendSuccess(res, 200, "Districts retrieved successfully.", { districts });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/v1/organisations/volunteers/meta/districts
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const getVolunteerDistrictsByState = asyncHandler(async (req, res) => {
+  const state = String(req.query.state || "").trim();
+  if (!state) return sendError(res, 422, "Query param 'state' is required.");
+
+  const districts = await Volunteer.distinct("district", { state });
+  districts.sort((a, b) => a.localeCompare(b, "en-IN"));
+
+  return sendSuccess(res, 200, "Districts retrieved successfully.", { districts });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/v1/organisations
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const getAllOrganisations = asyncHandler(async (req, res) => {
+  const {
+    page  = 1, limit = 12,
+    search, sortField, sortDir,
+    status, state, district, city, centreType,
+    interactionStatus,
+    ids,
+  } = req.query;
+
+  const dataScope = req._dataScope || {};
+  const dateScope = req._dateScope || {};
+
+  const extraFilters = {};
+
+  if (ids) {
+    const idList = String(ids).split(",").map((s) => s.trim()).filter(Boolean);
+    if (idList.length > 0) extraFilters._id = { $in: idList };
+  }
+
+  if (req.user.role === "partial_admin") {
+    const mods = req.user.permissions?.allowedModules ?? [];
+    const CENTRE_TYPES = ["School", "College", "NGO", "Corporate", "Online", "Community Centre"];
+    const allowedTypes = mods.filter((m) => CENTRE_TYPES.includes(m));
+
+    if (allowedTypes.length > 0) {
+      extraFilters.centreType = (centreType && allowedTypes.includes(centreType))
+        ? centreType
+        : { $in: allowedTypes };
+    } else if (centreType) {
+      extraFilters.centreType = centreType;
+    }
+  } else if (centreType) {
+    extraFilters.centreType = centreType;
+  }
+
+  if (status)   extraFilters.status   = status;
+  if (state)    extraFilters.state    = state;
+  if (district) extraFilters.district = district;
+  if (city)     extraFilters.city     = city;
+
+  // ── Latest interaction status filter — $last se sirf latest match karo ──
+  if (interactionStatus && VALID_INTERACTION_STATUSES.includes(interactionStatus)) {
+    extraFilters.$expr = {
+      $eq: [
+        { $last: "$interactions.interactionStatus" },
+        interactionStatus,
+      ],
+    };
+  }
+
+  let searchOr = null;
+  if (search?.trim()) {
+    const regex     = { $regex: search.trim(), $options: "i" };
+    const searchStr = search.trim();
+    searchOr = [
+      { centreName:               regex },
+      { centreType:               regex },
+      { city:                     regex },
+      { district:                 regex },
+      { state:                    regex },
+      { onboardedBy:              regex },
+      { address:                  regex },
+      { "contacts.name":          regex },
+      { "contacts.email":         regex },
+      { "contacts.contactNumber": regex },
+      { pincode: { $regex: searchStr, $options: "i" } },
+    ];
+  }
+
+  const query = buildQuery(dataScope, dateScope, searchOr, extraFilters);
+  const skip  = (parseInt(page) - 1) * parseInt(limit);
+
+  const [organisations, total] = await Promise.all([
+    Organisation.find(query)
+      .sort(buildSort(sortField, sortDir))
+      .skip(skip)
+      .limit(parseInt(limit))
+      .lean({ virtuals: true }),
+    Organisation.countDocuments(query),
+  ]);
+
+  const hidden   = getHiddenFields(req);
+  const safeOrgs = stripHiddenFields(organisations, hidden);
+
+  return sendSuccess(res, 200, "Organisations retrieved successfully.", {
+    organisations: safeOrgs,
+    total,
+    page:  parseInt(page),
+    pages: Math.ceil(total / parseInt(limit)),
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
